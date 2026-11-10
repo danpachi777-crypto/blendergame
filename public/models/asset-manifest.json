@@ -1,0 +1,40 @@
+{
+  "coordinate_system": "glTF Y-up, camera should stand at +Z looking toward -Z",
+  "kitchen": {
+    "table_y": 0,
+    "board_y": 0.1,
+    "board_width": 1.76,
+    "board_depth": 1.16
+  },
+  "food_groups": {
+    "cucumber": [
+      "cucumber_whole",
+      "cucumber_halfA",
+      "cucumber_halfB"
+    ],
+    "carrot": [
+      "carrot_whole",
+      "carrot_halfA",
+      "carrot_halfB"
+    ],
+    "salmon": [
+      "salmon_whole",
+      "salmon_halfA",
+      "salmon_halfB"
+    ],
+    "melon": [
+      "melon_whole",
+      "melon_halfA",
+      "melon_halfB"
+    ]
+  },
+  "split_axis": "X",
+  "food_base_y": 0,
+  "knife": {
+    "blade_direction": "-Z",
+    "edge_direction": "+X",
+    "length": 1.02
+  },
+  "source_scene": "Renzokugiri_AssetStudio",
+  "original_scene_preserved": "Scene"
+}
