@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { FOODS, matchesDirection, comboTier, cutScore } from "./slicing";
+import { SliceAudio } from "./slice-audio";
+import { gripPosition } from "./held-knife";
 export type Snapshot = {
   phase: "loading" | "ready" | "playing" | "paused" | "result";
   score: number;
@@ -62,7 +64,7 @@ export async function createGame(
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.87;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -125,7 +127,12 @@ export async function createGame(
   const loader = new GLTFLoader();
   const roots: THREE.Group[] = [];
   try {
-    for (const name of ["kitchen", "knife", ...FOODS.map((f) => f.id)]) {
+    for (const name of [
+      "kitchen",
+      "knife",
+      "hand",
+      ...FOODS.map((f) => f.id),
+    ]) {
       const gltf = await loader.loadAsync(
         `${import.meta.env.BASE_URL}models/${name}.glb`,
       );
@@ -145,11 +152,30 @@ export async function createGame(
     environment.dispose();
     throw e;
   }
-  const [kitchen, knife, ...templates] = roots;
+  const [kitchen, knife, hand, ...templates] = roots;
   scene.add(kitchen);
-  scene.add(knife);
-  knife.position.set(0.65, 0.3, 0.72);
-  knife.rotation.set(0.2, -0.36, -0.15);
+  // The handle is anchored to the finger, rather than lying on the counter.
+  const knifeRig = new THREE.Group();
+  const gripContent = new THREE.Group();
+  gripContent.position.set(0, -0.025, -0.2);
+  gripContent.add(knife, hand);
+  knifeRig.add(gripContent);
+  knifeRig.scale.setScalar(0.52);
+  knifeRig.rotation.set(1.12, -0.2, -0.24);
+  knifeRig.position.fromArray(
+    gripPosition(width, height, camera.fov, 1.25, width * 0.78, height * 0.79),
+  );
+  camera.add(knifeRig);
+  scene.add(camera);
+  gripContent.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      object.castShadow = false;
+      object.receiveShadow = false;
+    }
+  });
+  const gripTarget = new THREE.Vector3();
+  const wristMotion = new THREE.Vector2();
+  const sliceAudio = new SliceAudio();
   const particleCount = 160,
     particleGeometry = new THREE.BufferGeometry(),
     positions = new Float32Array(particleCount * 3),
@@ -198,9 +224,6 @@ export async function createGame(
     knifeSwing = 0,
     shake = 0,
     hitStop = 0,
-    soundEnabled = true,
-    audio: AudioContext | null = null,
-    noiseBuffer: AudioBuffer | null = null,
     down = false,
     pointerId = -1,
     anchor = { x: 0, y: 0, time: 0 },
@@ -219,57 +242,6 @@ export async function createGame(
     "(prefers-reduced-motion: reduce)",
   ).matches;
   const emit = () => update({ ...state });
-  function initAudio() {
-    try {
-      audio ??= new AudioContext();
-      if (audio.state === "suspended") void audio.resume();
-      if (!noiseBuffer) {
-        noiseBuffer = audio.createBuffer(
-          1,
-          audio.sampleRate * 0.18,
-          audio.sampleRate,
-        );
-        const data = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < data.length; i++)
-          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
-      }
-    } catch {}
-  }
-  function chopSound() {
-    if (!soundEnabled || !audio || !noiseBuffer) return;
-    const now = audio.currentTime;
-    const noise = audio.createBufferSource();
-    noise.buffer = noiseBuffer;
-    const filter = audio.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 1400 + state.tier * 1300;
-    const gain = audio.createGain();
-    gain.gain.setValueAtTime(0.7, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
-    noise.connect(filter).connect(gain).connect(audio.destination);
-    noise.start();
-    const osc = audio.createOscillator(),
-      g = audio.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(200 + state.tier * 110, now);
-    osc.frequency.exponentialRampToValueAtTime(65, now + 0.1);
-    g.gain.setValueAtTime(0.3, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
-    osc.connect(g).connect(audio.destination);
-    osc.start();
-    osc.stop(now + 0.15);
-    if (state.tier > 0) {
-      const tone = audio.createOscillator(),
-        tg = audio.createGain();
-      tone.type = "sine";
-      tone.frequency.value = 440 * Math.pow(2, (state.combo % 7) / 12);
-      tg.gain.setValueAtTime(0.045, now);
-      tg.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-      tone.connect(tg).connect(audio.destination);
-      tone.start();
-      tone.stop(now + 0.31);
-    }
-  }
   function removeFood(f: Food) {
     scene.remove(f.root);
   }
@@ -340,7 +312,7 @@ export async function createGame(
     knifeSwing = 1;
     shake = reducedMotion ? 0 : 0.025 + state.tier * 0.012;
     hitStop = 0.035;
-    chopSound();
+    sliceAudio.cut(f.index, state.combo, perfect, cutDirection.x * 0.18);
     if ("vibrate" in navigator) navigator.vibrate(12 + state.tier * 5);
     for (let i = 0; i < 16 + state.tier * 18; i++) {
       if (particles.length >= particleCount) particles.shift();
@@ -383,7 +355,7 @@ export async function createGame(
   const pointerDown = (e: PointerEvent) => {
     if (state.phase !== "playing" || down) return;
     e.preventDefault();
-    initAudio();
+    sliceAudio.unlock();
     down = true;
     pointerId = e.pointerId;
     renderer.domElement.setPointerCapture(e.pointerId);
@@ -397,7 +369,12 @@ export async function createGame(
     e.preventDefault();
     const now = performance.now(),
       r = host.getBoundingClientRect();
-    pointer = { x: e.clientX - r.left, y: e.clientY - r.top };
+    const nextPointer = { x: e.clientX - r.left, y: e.clientY - r.top };
+    wristMotion.set(
+      THREE.MathUtils.clamp((nextPointer.x - pointer.x) / 80, -0.25, 0.25),
+      THREE.MathUtils.clamp((nextPointer.y - pointer.y) / 80, -0.2, 0.2),
+    );
+    pointer = nextPointer;
     trail.push({ ...pointer, age: 0 });
     if (trail.length > 24) trail.shift();
     const dx = e.clientX - anchor.x,
@@ -578,19 +555,23 @@ export async function createGame(
     if (state.phase !== "paused") {
       knifeSwing = Math.max(0, knifeSwing - dt * 5.5);
       shake *= Math.exp(-dt * 15);
-      const swing = Math.sin((1 - knifeSwing) * Math.PI);
-      knife.position.set(
-        0.6 -
-          swing * 0.45 +
-          cutDirection.x * swing * 0.3 +
-          (down ? (pointer.x / width - 0.5) * 0.18 : 0),
-        0.28 + (knifeSwing ? Math.cos((1 - knifeSwing) * Math.PI) * 0.17 : 0),
-        0.73 - swing * 0.38 + cutDirection.y * swing * 0.2,
+      const swing = knifeSwing > 0 ? Math.sin((1 - knifeSwing) * Math.PI) : 0;
+      const gripX = down ? pointer.x : width * 0.78;
+      const gripY = down ? pointer.y : height * 0.79;
+      gripTarget.fromArray(
+        gripPosition(width, height, camera.fov, 1.25, gripX, gripY),
       );
-      knife.rotation.set(
-        0.2 - swing * 0.4,
-        -0.38 - swing * 0.55 + cutDirection.x * swing * 0.7,
-        -0.15 - swing * 0.45,
+      knifeRig.position.lerp(gripTarget, 1 - Math.exp(-dt * (down ? 38 : 10)));
+      knifeRig.position.z -= swing * 0.008;
+      wristMotion.multiplyScalar(Math.exp(-dt * 14));
+      knifeRig.rotation.set(
+        1.12 + swing * 0.28 + (reducedMotion ? 0 : wristMotion.y),
+        -0.2 +
+          cutDirection.x * swing * 0.25 +
+          (reducedMotion ? 0 : wristMotion.x),
+        -0.24 -
+          cutDirection.x * swing * 0.28 +
+          (reducedMotion ? 0 : wristMotion.x * 0.6),
       );
       camera.position.copy(cameraBase);
       if (!reducedMotion) {
@@ -665,7 +646,7 @@ export async function createGame(
       sequence = 0;
       spawnDelay = 0.2;
       down = false;
-      initAudio();
+      sliceAudio.unlock();
       emit();
     },
     pause() {
@@ -683,8 +664,7 @@ export async function createGame(
       emit();
     },
     setSound(v) {
-      soundEnabled = v;
-      if (v) initAudio();
+      sliceAudio.setEnabled(v);
     },
     dispose() {
       disposed = true;
@@ -721,7 +701,7 @@ export async function createGame(
       renderer.dispose();
       canvas.remove();
       fx.remove();
-      void audio?.close();
+      sliceAudio.dispose();
     },
   };
 }

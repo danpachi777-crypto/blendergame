@@ -26,7 +26,7 @@ test("continuous combo tiers and score progression", () => {
   assert.equal(cutScore(500, false), cutScore(50, false));
 });
 test("Blender exports contain intact and both cut models with embedded materials", () => {
-  for (const name of ["kitchen", "knife", ...FOODS.map((f) => f.id)]) {
+  for (const name of ["kitchen", "knife", "hand", ...FOODS.map((f) => f.id)]) {
     const file = readFileSync(
       new URL(`../public/models/${name}.glb`, import.meta.url),
     );

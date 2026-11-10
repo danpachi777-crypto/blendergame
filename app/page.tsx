@@ -143,7 +143,7 @@ export default function Home() {
           <div className="touch-guide">
             <span className="touch-dot" />
             <span>指を置いたまま、矢印の方向へ</span>
-            <small>画面のどこでもスライドできます</small>
+            <small>包丁は指先に追従。画面のどこでも切れます</small>
             <div className="gesture-lines">
               <i />
               <i />

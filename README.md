@@ -6,12 +6,14 @@
 
 ## 現在の試作
 
-- Blender製のキッチン、机、まな板、包丁、4種類の食材。切断後の断面モデルも制作。
+- Blender製のキッチン、机、まな板、包丁を握る右手、4種類の食材。切断後の断面モデルも制作。
 - きゅうり ↓ / にんじん ↘ / サーモン → / スイカ ↙。
+- 包丁の柄が指の位置に追従。Blender製の右手で握った一人称表示と、切断時の手首の動き。
 - 画面のどこでも連続スライド可能。指を戻す動きや方向違いではペナルティなし。
 - 60秒チャレンジと、制限時間・見送りのない練習モード。
 - 5 / 12 / 25コンボで斬撃・光の粒・音が進化。早く切るとPERFECT、コンボで加点。
 - 一時停止、タブを離れた際の自動停止、効果音オン・オフ、端末内の自己ベスト保存。
+- 食材別の切断音（刃の抜け・食材の割れ・汁気・まな板の打撃）を重ね、コンボで五音音階の短い響きを追加。重なった音にはコンプレッサーを適用。
 - 対応端末では短いバイブレーション。iPhone等の非対応環境でもゲームは動作。
 
 ## 開発
@@ -35,10 +37,12 @@ npm run preview
 
 - `app/page.tsx` / `app/globals.css`: 縦画面のUI。
 - `app/game.ts`: Three.jsシーン、連続Pointer Events、切断アニメーション、Web Audio。
+- `app/held-knife.ts`: 画面の指の位置を包丁の握り位置へ変換。
+- `app/slice-audio.ts` / `app/sound-design.ts`: 低遅延の音声再生、食材ごとの合成切断音。
 - `app/slicing.ts`: 方向判定・コンボ・加点。
-- `public/models/`: モバイル向けGLB。合計約2.4MB。食材はwhole/halfA/halfBの3グループ。
+- `public/models/`: モバイル向けGLB。合計約2.5MB。食材はwhole/halfA/halfBの3グループ。
 - `assets-src/renzokugiri.blend`: 編集可能なBlender制作データ。
-- `assets-src/create_assets.py`: Blender内でアセットを再生成するスクリプト。
+- `assets-src/create_assets.py` / `create_hand.py`: Blender内でアセットを再生成するスクリプト。
 - `public/models/asset-manifest.json`: 座標・オブジェクト名。
 
 UI描画はReact、3DはThree.js。GitHub PagesではViteの静的ビルドを使います。初期Vinext構成も残してあり、`dev:vinext` / `build:vinext` で使用できます。現在のゲームにサーバー・ログイン・データベースは不要です。

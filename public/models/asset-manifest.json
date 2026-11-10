@@ -36,5 +36,19 @@
     "length": 1.02
   },
   "source_scene": "Renzokugiri_AssetStudio",
-  "original_scene_preserved": "Scene"
+  "original_scene_preserved": "Scene",
+  "hand": {
+    "file": "hand.glb",
+    "root": "right_hand",
+    "mesh": "right_hand_geometry",
+    "same_transform_as": "knife.glb",
+    "grip_center": [
+      0,
+      0.025,
+      0.2
+    ],
+    "wrist_direction": "+X,+Z",
+    "skin_tone": "warm medium",
+    "authored_in": "Blender"
+  }
 }
